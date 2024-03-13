@@ -1,0 +1,19 @@
+{
+  "name": "@portkey-ai/mustache",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Portkey-AI/mustache.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Portkey-AI/mustache/issues"
+  },
+  "homepage": "https://github.com/Portkey-AI/mustache#readme"
+}
