@@ -809,7 +809,7 @@ mustache.getTemplateDetails = function (template, tags) {
 
             switch (type) {
                 case 'name':
-                    addUnique(details.variables.split(".")[0], value);
+                    addUnique(details.variables, value);
                     if (currentSection) {
                         if (!details.sectionVariables[currentSection]) {
                             details.sectionVariables[currentSection] = [];
