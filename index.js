@@ -869,8 +869,8 @@ mustache.getTemplateDetails = function (template, tags) {
 // Export the escaping function so that the user may override it.
 // See https://github.com/janl/mustache.js/issues/244
 mustache.escape = function(string) {
-  return string;
-};;
+  return JSON.stringify(string).slice(1, -1);
+};
 
 // Export these mainly for testing, but also for advanced usage.
 mustache.Scanner = Scanner;
