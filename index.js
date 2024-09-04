@@ -68,17 +68,16 @@ var entityMap = {
   '=': '&#x3D;'
 };
 
-function escapeHtml(string) {
-  return String(string).replace(/[&<>"'`=\/]/g, function fromEntityMap(s) {
-    return entityMap[s];
-  });
-}
-
 var whiteRe = /\s*/;
 var spaceRe = /\s+/;
 var equalsRe = /\s*=/;
-var curlyRe = /\s*\}/;
-var tagRe = /#|\^|\/|>>|>|\{|&|=|!/;
+var tagRe = /#|\^|\/|>>|>|&|=|!/;
+
+const mustacheOnlySpecialChars = ['#', '^', '/']
+const portkeySpecificMustacheSpecialChars = ['>', '>>']
+const mustacheSpecialChars = [...mustacheOnlySpecialChars, ...portkeySpecificMustacheSpecialChars]
+const portkeySpecificMustacheSpecialCharsMaximumNameLength = 50
+
 
 
 
@@ -134,6 +133,11 @@ function parseTemplate(template, tags) {
     nonSpace = false;
   }
 
+  function getLastIndexOfTokensWithData() {
+    const tokensWithData = tokens.filter(token => token);
+    return tokensWithData[tokensWithData.length - 1]?.[3] ?? 0;
+  }
+
   var openingTagRe, closingTagRe, closingCurlyRe;
   function compileTags(tagsToCompile) {
     if (typeof tagsToCompile === 'string')
@@ -145,6 +149,17 @@ function parseTemplate(template, tags) {
     openingTagRe = new RegExp(escapeRegExp(tagsToCompile[0]) + '\\s*');
     closingTagRe = new RegExp('\\s*' + escapeRegExp(tagsToCompile[1]));
     closingCurlyRe = new RegExp('\\s*' + escapeRegExp('}' + tagsToCompile[1]));
+  }
+  function updateExistingScannedCopyWithText(_tagsToCompile) {
+    const lastScannedPosition = getLastIndexOfTokensWithData();
+    for (let tagsIndex = 0; tagsIndex < _tagsToCompile?.length; tagsIndex++) {
+      type = 'text'
+      value = _tagsToCompile[tagsIndex]
+      start = lastScannedPosition + tagsIndex
+      tokens.push([type, value, start, lastScannedPosition + tagsIndex + 1]);
+    }
+    scanner.pos = lastScannedPosition + _tagsToCompile.length;
+    scanner.tail = scanner.string.substring(scanner.pos);
   }
 
   compileTags(tags || mustache.tags);
@@ -199,18 +214,65 @@ function parseTemplate(template, tags) {
       value = scanner.scanUntil(equalsRe);
       scanner.scan(equalsRe);
       scanner.scanUntil(closingTagRe);
-    } else if (type === '{') {
-      value = scanner.scanUntil(closingCurlyRe);
-      scanner.scan(curlyRe);
-      scanner.scanUntil(closingTagRe);
-      type = '&';
-    } else {
-      value = scanner.scanUntil(closingTagRe);
+    }
+    else {
+      if (portkeySpecificMustacheSpecialChars.includes(type)) {
+        const { tailIndex: openingTailIndex } = scanner.getMatchedIndex(openingTagRe);
+        const { tailIndex: closingTailIndex } = scanner.getMatchedIndex(closingTagRe);
+        if ((closingTailIndex > -1 && openingTailIndex > -1 && openingTailIndex < closingTailIndex) || (closingTailIndex > portkeySpecificMustacheSpecialCharsMaximumNameLength)) {
+          continue;
+        } else {
+          value = scanner.scanUntil(closingTagRe);
+        }
+      } else {
+        value = scanner.scanUntil(closingTagRe);
+      }
+    }
+
+    if (mustacheSpecialChars.includes(type)) {
+      const { tailIndex: openingTailIndex } = scanner.getMatchedIndex(openingTagRe);
+      const { tailIndex: closingTailIndex } = scanner.getMatchedIndex(closingTagRe);
+
+      const checkPossibleIndexIssues = closingTailIndex === -1 || (openingTailIndex > -1 && openingTailIndex < closingTailIndex)
+      const checkPortkeySpecificPossibleIndexIssues = checkPossibleIndexIssues || closingTailIndex > portkeySpecificMustacheSpecialCharsMaximumNameLength
+
+      if (
+        (portkeySpecificMustacheSpecialChars?.includes(type) && checkPortkeySpecificPossibleIndexIssues) ||
+        (mustacheSpecialChars?.includes(type) && checkPossibleIndexIssues)) {
+        const _tagsToCompile = tags || mustache.tags
+        const tagsToCompileComplete = `${_tagsToCompile[0]}${type}`
+        updateExistingScannedCopyWithText(tagsToCompileComplete)
+        continue;
+      } else {
+        if (!scanner.scan(closingTagRe)) { // failsafe code in case scanner not able to add text here
+          console.error('Unclosed tag at ' + scanner.pos);
+          continue;
+        }
+      }
+    }
+
+    // check if there is another opening tag before a closing one after opening tag started
+    if (type === 'name') {
+      const { matchIndex: openingMatchIndex } = scanner.getMatchedIndex(openingTagRe);
+      const { matchIndex: closingMatchIndex } = scanner.getMatchedIndex(closingTagRe);
+      if (openingMatchIndex > -1 && openingMatchIndex < closingMatchIndex) {
+        const _tagsToCompile = tags || mustache.tags
+        updateExistingScannedCopyWithText(_tagsToCompile[0])
+        continue;
+      }
     }
 
     // Match the closing tag.
-    if (!scanner.scan(closingTagRe))
-      throw new Error('Unclosed tag at ' + scanner.pos);
+    if (type === 'name') {
+      const { tailIndex: closingTailIndex } = scanner.getMatchedIndex(closingTagRe);
+      if (closingTailIndex === -1) { // if open tag as very last node
+        const _tagsToCompile = tags || mustache.tags
+        updateExistingScannedCopyWithText(_tagsToCompile[0])
+        continue;
+      } else { // continue scanning for rest
+        scanner.scan(closingTagRe)
+      }
+    }
 
     if (type == '>>') {
       token = [type, value, start, scanner.pos, indentation, tagIndex, lineHasNonSpace];
@@ -220,19 +282,23 @@ function parseTemplate(template, tags) {
       token = [type, value, start, scanner.pos];
     }
     tagIndex++;
-    tokens.push(token);
+    token && tokens.push(token);
 
-    if (type === '#' || type === '^') {
+    if ((type === '#' || type === '^') && scanner.getMatchedIndex(closingTagRe)?.tailIndex === 0) {
       sections.push(token);
     } else if (type === '/') {
       // Check section nesting.
       openSection = sections.pop();
 
-      if (!openSection)
-        throw new Error('Unopened section "' + value + '" at ' + start);
+      if (!openSection) {
+        console.error('Unopened section "' + value + '" at ' + start);
+        continue
+      }
 
-      if (openSection[1] !== value)
-        throw new Error('Unclosed section "' + openSection[1] + '" at ' + start);
+      if (openSection[1] !== value) {
+        console.error('Unclosed section "' + openSection[1] + '" at ' + start);
+        continue
+      }
     } else if (type === 'name' || type === '{' || type === '&') {
       nonSpace = true;
     } else if (type === '=') {
@@ -240,14 +306,16 @@ function parseTemplate(template, tags) {
       compileTags(value);
     }
   }
-
+  tokens = tokens?.filter(item => item)
   stripSpace();
 
   // Make sure there are no open sections when we're done.
   openSection = sections.pop();
 
-  if (openSection)
-    throw new Error('Unclosed section "' + openSection[1] + '" at ' + scanner.pos);
+  if (openSection) {
+    console.error('Unclosed section "' + openSection[1] + '" at ' + scanner.pos);
+  }
+
 
   return nestTokens(squashTokens(tokens));
 }
@@ -301,8 +369,10 @@ function nestTokens(tokens) {
         break;
       case '/':
         section = sections.pop();
-        section[5] = token[2];
-        collector = sections.length > 0 ? sections[sections.length - 1][4] : nestedTokens;
+        if (section) {
+          section[5] = token[2];
+          collector = sections.length > 0 ? sections[sections.length - 1][4] : nestedTokens;
+        }
         break;
       default:
         collector.push(token);
@@ -345,6 +415,22 @@ Scanner.prototype.scan = function scan(re) {
   this.pos += string.length;
 
   return string;
+};
+
+Scanner.prototype.getMatchedIndex = function scan(re) {
+  var match = this.tail.match(re);
+
+  if (!match || match.index === -1)
+    return {
+      matchIndex: -1,
+      tailIndex: -1,
+    };
+
+  var string = match[0];
+  return {
+    matchIndex: this.pos + string.length,
+    tailIndex: match.index,
+  }
 };
 
 /**
@@ -803,20 +889,32 @@ mustache.getTemplateDetails = function (template, tags) {
   }
 
   // Recursively walk through tokens and fill details
+
+  function addVariableNameFromKeyName(variableList, value) {
+    const hasVariableJSONKey = value?.includes('.')
+    if (hasVariableJSONKey) {
+      const variableJSONKey = value.split('.')[0]
+      addUnique(variableList, variableJSONKey);
+    } else {
+      addUnique(variableList, value);
+    }
+  }
+
   function walkTokens(tokens, currentSection = null) {
     tokens.forEach(token => {
       var type = token[0], value = token[1];
 
       switch (type) {
-        case 'name':
-          addUnique(details.variables, value);
+        case 'name': {
+          addVariableNameFromKeyName(details.variables, value);
           if (currentSection) {
             if (!details.sectionVariables[currentSection]) {
               details.sectionVariables[currentSection] = [];
             }
-            addUnique(details.sectionVariables[currentSection], value);
+            addVariableNameFromKeyName(details.sectionVariables[currentSection], value);
           }
           break;
+        }
         case '>':
           addUnique(details.partials, value);
           break;
