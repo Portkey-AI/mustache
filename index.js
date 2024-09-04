@@ -71,7 +71,8 @@ var entityMap = {
 var whiteRe = /\s*/;
 var spaceRe = /\s+/;
 var equalsRe = /\s*=/;
-var tagRe = /#|\^|\/|>>|>|&|=|!/;
+var curlyRe = /\s*\}/;
+var tagRe = /#|\^|\/|>>|>|\{|&|=|!/;
 
 const mustacheOnlySpecialChars = ['#', '^', '/']
 const portkeySpecificMustacheSpecialChars = ['>', '>>']
@@ -211,11 +212,27 @@ function parseTemplate(template, tags) {
 
     // Get the tag value.
     if (type === '=') {
+      const { tailIndex: closingTailIndex } = scanner.getMatchedIndex(closingTagRe);
+      if (closingTailIndex === -1) {
+        const _tagsToCompile = tags || mustache.tags
+        updateExistingScannedCopyWithText(`${_tagsToCompile[0]}=`)
+        continue;
+      }
       value = scanner.scanUntil(equalsRe);
       scanner.scan(equalsRe);
-      scanner.scanUntil(closingTagRe);
-    }
-    else {
+      scanner.scan(closingTagRe);
+    } else if (type === '{') {
+      const { tailIndex: closingTailIndex } = scanner.getMatchedIndex(closingTagRe);
+      if (closingTailIndex === -1) {
+        const _tagsToCompile = tags || mustache.tags
+        updateExistingScannedCopyWithText(`${_tagsToCompile[0]}{`)
+        continue;
+      }
+      value = scanner.scanUntil(closingCurlyRe);
+      scanner.scan(curlyRe);
+      scanner.scan(closingTagRe);
+      type = '&';
+    } else {
       if (portkeySpecificMustacheSpecialChars.includes(type)) {
         const { tailIndex: openingTailIndex } = scanner.getMatchedIndex(openingTagRe);
         const { tailIndex: closingTailIndex } = scanner.getMatchedIndex(closingTagRe);
@@ -315,7 +332,6 @@ function parseTemplate(template, tags) {
   if (openSection) {
     console.error('Unclosed section "' + openSection[1] + '" at ' + scanner.pos);
   }
-
 
   return nestTokens(squashTokens(tokens));
 }
@@ -905,6 +921,7 @@ mustache.getTemplateDetails = function (template, tags) {
       var type = token[0], value = token[1];
 
       switch (type) {
+        case '&':
         case 'name': {
           addVariableNameFromKeyName(details.variables, value);
           if (currentSection) {
