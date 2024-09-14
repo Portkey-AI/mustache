@@ -270,8 +270,8 @@ function parseTemplate(template, tags) {
 
     // check if there is another opening tag before a closing one after opening tag started
     if (type === 'name') {
-      const { matchIndex: openingMatchIndex } = scanner.getMatchedIndex(openingTagRe);
-      const { matchIndex: closingMatchIndex } = scanner.getMatchedIndex(closingTagRe);
+      const { tailIndex: openingMatchIndex } = scanner.getMatchedIndex(openingTagRe);
+      const { tailIndex: closingMatchIndex } = scanner.getMatchedIndex(closingTagRe);
       if (openingMatchIndex > -1 && openingMatchIndex < closingMatchIndex) {
         const _tagsToCompile = tags || mustache.tags
         updateExistingScannedCopyWithText(_tagsToCompile[0])
@@ -444,7 +444,7 @@ Scanner.prototype.getMatchedIndex = function scan(re) {
 
   var string = match[0];
   return {
-    matchIndex: this.pos + string.length,
+    matchIndex: this.pos + (match.index ?? 0) + string.length,
     tailIndex: match.index,
   }
 };
