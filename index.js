@@ -444,7 +444,7 @@ Scanner.prototype.getMatchedIndex = function scan(re) {
 
   var string = match[0];
   return {
-    matchIndex: this.pos + string.length,
+    matchIndex: this.pos + (match.index ?? 0) + string.length,
     tailIndex: match.index,
   }
 };
