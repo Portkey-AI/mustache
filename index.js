@@ -262,7 +262,7 @@ function parseTemplate(template, tags) {
         continue;
       } else {
         if (!scanner.scan(closingTagRe)) { // failsafe code in case scanner not able to add text here
-          console.error('Unclosed tag at ' + scanner.pos);
+          // console.error('Unclosed tag at ' + scanner.pos);
           continue;
         }
       }
@@ -308,12 +308,12 @@ function parseTemplate(template, tags) {
       openSection = sections.pop();
 
       if (!openSection) {
-        console.error('Unopened section "' + value + '" at ' + start);
+        //console.error('Unopened section "' + value + '" at ' + start);
         continue
       }
 
       if (openSection[1] !== value) {
-        console.error('Unclosed section "' + openSection[1] + '" at ' + start);
+        // console.error('Unclosed section "' + openSection[1] + '" at ' + start);
         continue
       }
     } else if (type === 'name' || type === '{' || type === '&') {
@@ -330,7 +330,7 @@ function parseTemplate(template, tags) {
   openSection = sections.pop();
 
   if (openSection) {
-    console.error('Unclosed section "' + openSection[1] + '" at ' + scanner.pos);
+    //console.error('Unclosed section "' + openSection[1] + '" at ' + scanner.pos);
   }
 
   return nestTokens(squashTokens(tokens));
