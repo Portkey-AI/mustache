@@ -57,16 +57,16 @@ function isWhitespace(string) {
   return !testRegExp(nonSpaceRe, string);
 }
 
-var entityMap = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-  '/': '&#x2F;',
-  '`': '&#x60;',
-  '=': '&#x3D;'
-};
+// var entityMap = {
+//   '&': '&amp;',
+//   '<': '&lt;',
+//   '>': '&gt;',
+//   '"': '&quot;',
+//   "'": '&#39;',
+//   '/': '&#x2F;',
+//   '`': '&#x60;',
+//   '=': '&#x3D;'
+// };
 
 var whiteRe = /\s*/;
 var spaceRe = /\s+/;
@@ -984,9 +984,27 @@ mustache.getTemplateDetails = function (template, tags) {
 // Export the escaping function so that the user may override it.
 // See https://github.com/janl/mustache.js/issues/244
 mustache.escape = function (string) {
-  return String(string).replace(/[&<>"'`=\/]/g, function (s) {
-    return entityMap[s];
-  });
+  if (string == null) return '';
+
+  let str = String(string);
+
+  // Temporarily protect real newlines, tabs, and quotes
+  const NL_PLACEHOLDER = '__MUSTACHE_NL__';
+  const TAB_PLACEHOLDER = '__MUSTACHE_TAB__';
+  const QUOTE_PLACEHOLDER = '__MUSTACHE_QUOTE__';
+
+  str = str.replace(/\n/g, NL_PLACEHOLDER).replace(/\t/g, TAB_PLACEHOLDER).replace(/"/g, QUOTE_PLACEHOLDER);
+
+  // Now escape existing backslashes
+  str = str.replace(/\\/g, '\\\\');
+
+  // Restore placeholders; for quotes, insert a single escaped quote \"
+  str = str
+    .replace(new RegExp(escapeRegExp(NL_PLACEHOLDER), 'g'), '\n')
+    .replace(new RegExp(escapeRegExp(TAB_PLACEHOLDER), 'g'), '\t')
+    .replace(new RegExp(escapeRegExp(QUOTE_PLACEHOLDER), 'g'), '\\"');
+
+  return str;
 };
 
 // Export these mainly for testing, but also for advanced usage.
