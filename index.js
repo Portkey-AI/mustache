@@ -984,7 +984,9 @@ mustache.getTemplateDetails = function (template, tags) {
 // Export the escaping function so that the user may override it.
 // See https://github.com/janl/mustache.js/issues/244
 mustache.escape = function (string) {
-  return JSON.stringify(string).slice(1, -1);
+  return String(string).replace(/[&<>"'`=\/]/g, function (s) {
+    return entityMap[s];
+  });
 };
 
 // Export these mainly for testing, but also for advanced usage.
